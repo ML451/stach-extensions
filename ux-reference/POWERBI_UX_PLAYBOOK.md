@@ -20,6 +20,11 @@
 11. [Color Philosophy — "Color as Highlight"](#11-color-philosophy--color-as-highlight)
 12. [Small Multiples](#12-small-multiples)
 13. [Regional Breakdown with Sparklines](#13-regional-breakdown-with-sparklines)
+14. [Variance Analysis (IBCS / Zebra BI Style)](#14-variance-analysis-ibcs--zebra-bi-style)
+15. [Master-Detail & Linked Panels](#15-master-detail--linked-panels)
+16. [Dark Theme Dashboards](#16-dark-theme-dashboards)
+17. [Treemaps & Proportional Views](#17-treemaps--proportional-views)
+18. [Scatter & Bubble Charts](#18-scatter--bubble-charts)
 
 ---
 
@@ -587,6 +592,363 @@ A filled area chart at the top of the dashboard showing the primary metric over 
 
 ---
 
+## 14. Variance Analysis (IBCS / Zebra BI Style)
+
+> IBCS (International Business Communication Standards) — a notation system for
+> business charts and tables that prioritizes clarity, consistency, and comparability.
+
+### 14a. Waterfall Charts (Actual vs Plan / Actual vs Prior Year)
+
+Bridge charts showing how a starting value transforms into an ending value through incremental positive/negative changes.
+
+```
+ Actual vs Previous Year                Actual vs Plan
+ ┌──────────────────────────┐           ┌──────────────────────────┐
+ │  PY     +Δ        AC     │           │  PL     +Δ        AC     │
+ │ ┌───┐            ┌───┐   │           │ ┌───┐            ┌───┐   │
+ │ │567│  ┌─────┐   │928│   │           │ │922│   ┌───┐    │928│   │
+ │ │   │  │+361 │   │   │   │           │ │   │   │ +5│    │   │   │
+ │ │   │  │green│   │   │   │           │ │   │   │grn│    │   │   │
+ │ └───┘  └─────┘   └───┘   │           │ └───┘   └───┘    └───┘   │
+ │         +63.6%            │           │         +0.6%            │
+ └──────────────────────────┘           └──────────────────────────┘
+```
+
+**Preferred elements:**
+- Three-bar bridge: start value (gray) → delta bar (green positive / red negative) → end value (gray/black)
+- Delta bar labeled with absolute value AND percentage
+- Positive delta: green fill; negative delta: red fill
+- Start/end bars: neutral gray or dark
+- Title states the comparison clearly: "Actual vs Previous Year", "Actual vs Plan"
+- Side-by-side waterfalls for PY and Plan comparisons on the same row
+- Percentage change displayed prominently below or beside the delta bar
+
+**Reference:** Zebra BI Sales dashboard — dual waterfall layout
+
+### 14b. Monthly Variance Bars (AC vs PY with Green/Red Deltas)
+
+Paired bar chart showing actual (AC) values alongside the variance (delta) from a reference period, month by month.
+
+```
+ AC and PY by Month (in K)
+
+ Jan    ██████ +12%   ████████▓▓▓
+ Feb    █████  +8%    ███████▓▓
+ Mar    ███████ +15%  █████████▓▓▓▓
+ Apr    ████   -3%    ██████▒▒
+ May    ██████ +10%   ████████▓▓▓
+ ...
+        ──AC──         ──PY── ──Δ──
+                       green=positive  red=negative
+```
+
+**Preferred elements:**
+- Each month shows: AC bar (solid) + delta annotation (% above/beside)
+- Delta is visualized as a colored extension: green for positive variance, red for negative
+- PY shown as a reference mark or lighter bar behind the AC bar
+- Percentage labels directly above or beside each month pair
+- Compact horizontal layout — all months visible without scrolling
+- Consistent scale across months
+
+**Reference:** Zebra BI "AC and PY by Month" chart
+
+### 14c. Integrated Variance Table (Delta Bars + Lollipop Indicators)
+
+A table combining absolute values, inline delta bars, and lollipop/dot indicators for percentage variance.
+
+```
+ ┌───────────────┬────────┬────────────────┬──────────────────┐
+ │ Group         │   AC   │    ΔPL         │    ΔPL%          │
+ ├───────────────┼────────┼────────────────┼──────────────────┤
+ │ Prod Grp A    │   425  │ ▓▓▓▓▓▓▓  +38  │  ────●  +9.8%   │
+ │ Prod Grp B    │   312  │ ▓▓▓▓  +22     │  ──●    +7.6%   │
+ │ Prod Grp C    │   191  │ ▒▒▒  -15      │  ●──    -7.3%   │
+ ├───────────────┼────────┼────────────────┼──────────────────┤
+ │ Total         │   928  │ ▓  +5         │  ●      +0.6%   │
+ └───────────────┴────────┴────────────────┴──────────────────┘
+                            green=positive    ● = lollipop dot
+                            red=negative      line from zero
+```
+
+**Preferred elements:**
+- AC column: right-aligned absolute values
+- ΔPL column: inline horizontal bar showing magnitude of variance (green positive, red negative)
+- ΔPL% column: lollipop/dot chart — a dot on a line anchored at zero, extending left (negative) or right (positive)
+- Total row at the bottom, visually distinct (bold or separator line)
+- Sortable by any column
+- Product category or group in leftmost column
+- No background fills on rows — let the inline charts carry the visual weight
+- Compact: each row ~24–30px height
+
+**DAX concept for variance:**
+```dax
+ΔPL = [Actual] - [Plan]
+ΔPL% = DIVIDE([Actual] - [Plan], [Plan], 0)
+```
+
+**Reference:** Zebra BI "AC, PY, PL by Group" and "by Product Category" tables
+
+### 14d. Filter Bar with Metric / Period / Aggregation Toggles
+
+A horizontal filter strip at the top that controls the entire dashboard view.
+
+```
+ ┌──────────────────────────────────────────────────────┐
+ │  [Revenue ▼]  [Oct ▼]  [2018 ▼]  [Month] [YTD]     │
+ └──────────────────────────────────────────────────────┘
+```
+
+**Preferred elements:**
+- Dropdown selectors for: Metric (Revenue, Profit, Units), Month, Year
+- Toggle buttons for aggregation: Month vs YTD (mutually exclusive, pill-style)
+- Single horizontal row — never stacked
+- Placed at the very top, spanning full width
+- Muted background, aligned left
+
+**Reference:** Zebra BI dashboard filter bar
+
+---
+
+## 15. Master-Detail & Linked Panels
+
+### 15a. Click-to-Filter Security/Entity Panel
+
+A ranked bar chart on the left that, when clicked, drives detail charts on the right.
+
+```
+ ┌──────────────────────┐  ┌───────────────────────────────┐
+ │ Performance by       │  │ RRC — Detail View             │
+ │ Security             │  │                               │
+ │                      │  │ Security Price                │
+ │ RRC  ████████ $409M  │  │ ╱‾‾╲╱‾‾‾‾╲                  │
+ │ TWTR ███████  $367M  │  │                               │
+ │ CLF  ██████   $312M  │  │ $ Exposure                   │
+ │ CHK  █████    $278M  │  │ ▓▓▓ ▓▓▓ ███ ███ ▓▓▓ ███     │
+ │ VALE ████     $245M  │  │ Short=orange  Long=blue       │
+ │ ...                  │  │                               │
+ │                      │  │ Cumulative Alpha              │
+ │ [Click a security    │  │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ (area)      │
+ │  to view trends]     │  │                               │
+ │                      │  │ Cumulative RoR                │
+ │ Filter by Sector ▼   │  │ ░░░░░░░░░░░░░░░ (area)       │
+ │ Date Range    ▼      │  │                               │
+ └──────────────────────┘  └───────────────────────────────┘
+```
+
+**Preferred elements:**
+- Left panel (30–35% width): ranked horizontal bars sorted by primary metric descending
+- Multi-metric bars per row (e.g., Alpha in amber, Exposure in teal, RoR in green)
+- Right panel (65–70% width): 3–4 vertically stacked time-series charts, each focused on a different measure
+- Stacked panels share the same x-axis (time) — aligned vertically for easy cross-metric comparison
+- Click instruction text: "Click a security to view trends" — discoverable interaction cue
+- Sector/date filters at the bottom of the left panel
+- Values formatted with abbreviated currency: `$409M`, `$1.2B`
+- Hover tooltip on each bar for exact figures
+
+### 15b. Stacked Vertical Time-Series Panels
+
+Multiple time-series charts stacked vertically with a shared time axis, each showing a different metric for the selected entity.
+
+```
+ ┌─────────────────────────────┐
+ │ Security Price              │
+ │ ╱‾╲  ╱‾‾‾╲    ╱‾╲          │
+ │╱    ╲╱      ╲╱╱    ╲        │
+ ├─────────────────────────────┤
+ │ $ Exposure (Long/Short)     │
+ │ ▓▓▓ ▓▓▓ ███ ███ ▓▓▓ ███   │
+ │ orange=Short  blue=Long     │
+ ├─────────────────────────────┤
+ │ Cumulative Alpha            │
+ │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ (green area)│
+ ├─────────────────────────────┤
+ │ Cumulative RoR              │
+ │ ░░░░░░░░░░░░░░ (gray area) │
+ └─────────────────────────────┘
+  2018     2019     2020    2021
+```
+
+**Preferred elements:**
+- 3–4 panels stacked, equal height
+- Shared x-axis at the bottom only (avoid repeating on each panel)
+- Each panel: single chart type (line, bar, area) with its own y-axis
+- Chart type varies by measure: line for price, bar for exposure (with Long/Short color split), area for cumulative metrics
+- Thin horizontal dividers between panels
+- No per-panel legends — use a shared legend at the top or color-code the chart titles
+
+**Reference:** Security Exposures & Performance dashboard — right detail panel
+
+---
+
+## 16. Dark Theme Dashboards
+
+### 16a. Investment / Portfolio Dark Theme
+
+A dark-background dashboard for financial or portfolio data.
+
+```
+ ┌─────────────────────────────────────────────────────────┐
+ │  ▪ Dark BG (#1A1A2E or #0F0F1A)                        │
+ │                                                         │
+ │ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────┐│
+ │ │ Investment │ │ Portfolio  │ │ Today G/L  │ │Total G/L││
+ │ │ ₹17,041   │ │ ₹18,413   │ │ -₹70.7     │ │₹1,372  ││
+ │ │            │ │            │ │ -1.3% red  │ │+8.1% grn││
+ │ └────────────┘ └────────────┘ └────────────┘ └────────┘│
+ │                                                         │
+ │  Total Gain/Loss (purple area chart)                    │
+ │  ╱‾‾╲    ╱‾‾‾‾╲╱‾╲                                    │
+ │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ (purple gradient)                │
+ │ - - - - - - - - - -  (dashed zero/reference line)      │
+ │                                                         │
+ │ ┌─ My Holdings ────────────────────────────────────┐    │
+ │ │ AAPL   $187.2  +15.1%  ▁▃▅▆▇█  green            │    │
+ │ │ GOOG   $142.8  +10.0%  ▁▂▅▆▇█  green            │    │
+ │ │ ITC    $418.5  -10.5%  █▇▅▃▂▁  red              │    │
+ │ └──────────────────────────────────────────────────┘    │
+ │                                                         │
+ │ ┌─ Top Gainers ─┐  ┌─ Top Losers ──┐  ┌─ Sector ──┐   │
+ │ │ AAPL  +15.1%  │  │ ITC   -10.5%  │  │ Tech  60% │   │
+ │ │ GOOG  +10.0%  │  │ JPM    -2.9%  │  │ Fin   18% │   │
+ │ │ MSFT  +28.5%  │  │ XOM    -1.0%  │  │ Cons  16% │   │
+ │ └───────────────┘  └───────────────┘  │ Energy 6% │   │
+ │                                        └───────────┘   │
+ └─────────────────────────────────────────────────────────┘
+```
+
+**Dark theme color palette:**
+
+| Role | Color | Hex | Usage |
+|---|---|---|---|
+| Background | Deep Navy | `#1A1A2E` | Canvas / page background |
+| Card BG | Dark Slate | `#16213E` | Card and panel backgrounds |
+| Text Primary | White | `#EAEAEA` | KPI values, headers |
+| Text Secondary | Muted Gray | `#8892A0` | Labels, subtitles |
+| Accent / Trend | Purple | `#7B68EE` | Area fills, sparklines, brand accent |
+| Positive | Green | `#00C853` | Gains, positive deltas |
+| Negative | Red/Coral | `#FF5252` | Losses, negative deltas |
+| Dividers | Subtle | `#2A2A4A` | Card borders, separators |
+
+**Preferred elements:**
+- High contrast: white/light text on dark backgrounds
+- Reduce brightness: use muted greens (`#00C853`) instead of neon
+- Purple or teal as the brand accent (avoid blue-on-blue clashes)
+- Cards slightly lighter than the background (`#16213E` on `#1A1A2E`) for layering
+- Dashed reference/zero lines visible against dark background
+- Sparklines in the holdings table match the gain/loss color per row
+- Top Gainers (green-titled) and Top Losers (red-titled) as paired mini-tables
+
+**When to use dark theme:**
+- Financial / trading / portfolio dashboards where users work long sessions
+- Real-time monitoring dashboards
+- Presentation mode / executive briefings on large screens
+
+**Reference:** Investment Portfolio dashboard
+
+---
+
+## 17. Treemaps & Proportional Views
+
+### 17a. Category Treemap
+
+A space-filling rectangular layout showing proportional sizes of categories.
+
+```
+ Ventes by Catégorie
+ ┌──────────────────┬────────────┬───────┐
+ │                  │            │       │
+ │      ERP         │   Ventes   │  CRM  │
+ │    (largest)     │            │       │
+ │                  ├────────┬───┤       │
+ │                  │Planif. │Fin│       │
+ └──────────────────┴────────┴───┴───────┘
+```
+
+**Preferred elements:**
+- Each rectangle proportional to its metric value (revenue, count, etc.)
+- Category label inside each rectangle (truncate if too small)
+- Value shown inside or on hover
+- Color: either a single-hue gradient (larger = darker) or distinct category colors
+- No more than 8–12 categories — beyond that, group small ones into "Other"
+- No heavy borders; thin white gaps between rectangles
+
+**When to use:**
+- Showing part-to-whole relationships across many categories
+- When a pie chart would have too many slices
+- Comparing relative sizes at a glance
+
+**When NOT to use:**
+- When precise comparison matters (bar charts are better for that)
+- When categories are similarly sized (differences become invisible)
+
+**Reference:** Démo Le CFO masqué — "Ventes by Catégorie" treemap, Executive Metrics treemap
+
+---
+
+## 18. Scatter & Bubble Charts
+
+### 18a. Multi-Dimension Bubble Chart
+
+A scatter plot where the x-axis, y-axis, and bubble size each encode a different metric. Color encodes category.
+
+```
+                 High Margin
+                    │
+                    │       ○ ERP
+                    │    (large bubble = high qty)
+                    │
+     Low Revenue ───┼─────────────── High Revenue
+                    │
+                    │  ● CRM
+                    │  (small bubble = low qty)
+                    │
+                 Low Margin
+```
+
+**Preferred elements:**
+- X-axis: primary metric (Revenue, Sales)
+- Y-axis: secondary metric (Margin, Profit %)
+- Bubble size: volume metric (Quantity, Count)
+- Bubble color: category (product line, segment)
+- Semi-transparent fills so overlapping bubbles remain readable
+- Quadrant lines or reference lines to segment performance zones
+- Tooltip on hover: category name + all three metric values
+- Limit to 15–20 bubbles maximum
+
+**When to use:**
+- Exploring relationships between 2–3 metrics simultaneously
+- Identifying outliers (e.g., high revenue but low margin)
+- Portfolio or product performance matrix
+
+**Reference:** Démo Le CFO masqué — "Ventes, Marge brute, Qté by Catégorie" bubble chart
+
+### 18b. Dual-Axis Dot + Line Chart
+
+Combining dots (one measure) with a line (another measure) on a shared time axis to show two related metrics.
+
+```
+ Ventes, Marge by Mois
+
+ $│         ●              ●
+  │    ●         ●    ●
+  │ ●                          ●    ← dots = Ventes
+  │╱‾‾‾╲╱‾‾‾╲╱‾‾‾╲╱‾‾‾╲╱‾‾╲
+  │                                  ← line = Marge
+  └─────────────────────────────
+    Jan  Feb  Mar  Apr  May  Jun
+```
+
+**Preferred elements:**
+- Dots: larger, filled circles for the primary metric (easier to read individually)
+- Line: continuous thin line for the secondary metric (shows trend)
+- Separate y-axes if scales differ significantly (left axis for dots, right for line)
+- Color-differentiated: dots in one color, line in another
+- Avoid more than 2 series — dual-axis charts become confusing with 3+
+
+**Reference:** Démo Le CFO masqué — "Ventes, Marge by Mois" chart
+
+---
+
 ## Quick Reference: DAX Patterns
 
 ### Period-over-Period Conditional Color
@@ -642,12 +1004,64 @@ YOY % =
     DIVIDE(CY - PY, PY, 0)
 ```
 
+### Actual vs Plan Variance
+```dax
+ΔPL = [Actual] - [Plan]
+
+ΔPL% = DIVIDE([Actual] - [Plan], [Plan], 0)
+```
+
+### Actual vs Prior Year Variance
+```dax
+ΔPY =
+  VAR _AC = [Actual]
+  VAR _PY =
+    CALCULATE(
+      [Actual],
+      DATEADD('Date Table'[Date], -1, YEAR)
+    )
+  RETURN
+    _AC - _PY
+
+ΔPY% =
+  VAR _AC = [Actual]
+  VAR _PY =
+    CALCULATE(
+      [Actual],
+      DATEADD('Date Table'[Date], -1, YEAR)
+    )
+  RETURN
+    DIVIDE(_AC - _PY, _PY, 0)
+```
+
+### Waterfall Bridge Value (for Zebra BI)
+```dax
+-- Use as a measure in Zebra BI waterfall visual:
+-- Column 1: PY or Plan (reference)
+-- Column 2: This variance measure (auto-bridges)
+-- Column 3: AC (result)
+-- Zebra BI handles the waterfall rendering natively.
+Variance = [Actual] - [Plan]
+```
+
+### Today's Gain/Loss (Portfolio)
+```dax
+Today G/L =
+  VAR _current = [Current Price] * [Shares]
+  VAR _prevClose = [Previous Close] * [Shares]
+  RETURN
+    _current - _prevClose
+
+Today G/L % = DIVIDE([Today G/L], [Previous Close] * [Shares], 0)
+```
+
 ---
 
 ## Changelog
 
 | Date | Update |
 |---|---|
+| 2026-02-20 | Added Variance Analysis/IBCS, Master-Detail Panels, Dark Theme, Treemaps, Scatter/Bubble Charts (19 screenshots total) |
 | 2026-02-20 | Added Color Philosophy, Small Multiples, Regional Sparkline Tables, YOY DAX patterns (14 screenshots total) |
 | 2026-02-20 | Initial playbook created from 10 reference screenshots |
 
