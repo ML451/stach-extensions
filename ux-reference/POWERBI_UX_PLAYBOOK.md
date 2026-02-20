@@ -25,6 +25,7 @@
 16. [Dark Theme Dashboards](#16-dark-theme-dashboards)
 17. [Treemaps & Proportional Views](#17-treemaps--proportional-views)
 18. [Scatter & Bubble Charts](#18-scatter--bubble-charts)
+19. [Editorial / Journalistic Chart Style](#19-editorial--journalistic-chart-style)
 
 ---
 
@@ -529,6 +530,57 @@ A grid of identical chart panels — one per dimension value — enabling at-a-g
 
 **Reference:** Historical Avocado Price & Volume dashboard (Andy Kriebel / @VizWizBI)
 
+### 12b. Asymmetric / Weighted Small Multiples
+
+Small multiples where one dominant panel is larger than the others, reflecting that category's outsized proportion or importance.
+
+```
+ Share of new S&P 500 directors by demographic
+
+ ┌───────────────────────────┐  ┌────────────┐
+ │  White                    │  │  Asian     │
+ │  100%─                    │  │  50%─      │
+ │       █ █ █ █ █ █ █ █ █  │  │   █ █ █ █  │
+ │       █ █ █ █ █ █ █ █ █  │  │   █ █ █ █  │
+ │       █ █ █ █ █ █ █ █ █  │  │            │
+ │   0%─                     │  │  0%─       │
+ │       '16    '20    '26*  │  │  '16  '26* │
+ │                    81.4%  │  │       8.9% │
+ ├───────────────────────────┤  ├────────────┤
+ │                           │  │  Hispanic  │
+ │    (larger panel for      │  │  50%─      │
+ │     dominant category)    │  │   █ █ █ █  │
+ │                           │  │  0%─  5.3% │
+ │                           │  ├────────────┤
+ │                           │  │  Black     │
+ │                           │  │  50%─      │
+ │                           │  │   █ █ 2.7% │
+ │                           │  │  0%─       │
+ └───────────────────────────┘  └────────────┘
+    ← dominant ~60% width →      ← 40% →
+```
+
+**Preferred elements:**
+- Dominant category gets a larger panel (50–60% of total width) with its own y-axis scale (e.g., 0–100%)
+- Remaining categories share a column of smaller panels with a different, zoomed-in scale (e.g., 0–50%) so their trends are readable
+- All panels share the same x-axis (time) and bar style
+- Single color for all bars — no conditional formatting; the shape tells the story
+- End-value callout: the most recent bar annotated with a large, bold number (e.g., `81.4%`)
+- Yearly bars with abbreviated year labels (`'16`, `'18`, `'20`, `'22`, `'24`, `'26*`)
+- Asterisk footnote for incomplete periods (`*Through Feb. 17`)
+- Grouping label for related panels (e.g., "People of color" brackets Asian + Hispanic + Black)
+
+**When to use:**
+- One category dominates (>60%) and others are much smaller
+- Equal-sized panels would compress the smaller categories into unreadable slivers
+- The story is about both the dominant share AND the trends in smaller segments
+
+**When NOT to use:**
+- Categories are roughly equal in magnitude — use equal-sized panels (12a) instead
+- More than 5–6 panels — becomes too fragmented
+
+**Reference:** WSJ "Share of new S&P 500 directors by demographic" (Stephanie Stamm)
+
 ---
 
 ## 13. Regional Breakdown with Sparklines
@@ -949,6 +1001,93 @@ Combining dots (one measure) with a line (another measure) on a shared time axis
 
 ---
 
+## 19. Editorial / Journalistic Chart Style
+
+> Inspired by WSJ, NYT, and FT data visualization teams — clean, purposeful,
+> typography-forward charts designed for a wide audience.
+
+### 19a. Core Principles
+
+**Simplicity over decoration:**
+- One chart = one message. No dual-purpose visuals.
+- Remove all non-essential elements: gridlines, borders, backgrounds, legends (if only one series)
+- Let the data shape carry the narrative
+
+**Typography does the heavy lifting:**
+- Large, clear chart title that states the insight (not just the topic)
+  - Good: "White directors still dominate S&P 500 boards"
+  - Weak: "Share of directors by demographic"
+- Subtitle provides context, time range, or methodology note
+- End-value annotations: the most recent data point labeled in bold, directly on the chart
+- Axis labels: minimal, abbreviated (`'16`, `'18`, `'20` not `2016`, `2018`, `2020`)
+
+**Color restraint:**
+- Single hue for all bars/lines (e.g., teal `#2E8B8B`, WSJ blue `#0274B6`)
+- Color only introduced to distinguish when absolutely necessary
+- Gray for reference, context, or secondary data
+- Consistent with the "Color as Highlight" philosophy (Section 11)
+
+### 19b. End-Value Annotation Pattern
+
+The most recent data point is called out with a prominent number placed at the end of the series.
+
+```
+ █                              81.4%
+ █  █                           ←── large, bold
+ █  █  █  █                         annotation at
+ █  █  █  █  █  █  █  █  █  █      final bar
+ '16   '18   '20   '22   '24  '26*
+```
+
+**Preferred elements:**
+- Final bar slightly separated or same spacing as others
+- Value label: bold, 1.5–2x axis label font size, positioned to the right of or above the final bar
+- No other bars labeled (avoid clutter) — previous values available on hover/tooltip
+- Asterisk on incomplete periods with footnote below
+
+### 19c. Footnotes & Source Attribution
+
+Every editorial chart includes proper attribution below the visual.
+
+```
+ ┌─────────────────────────────────────────────┐
+ │  [Chart content]                            │
+ │                                             │
+ │  *Through Feb. 17                           │
+ │  Source: ISS Corporate                      │
+ │  Stephanie Stamm / WSJ                      │
+ └─────────────────────────────────────────────┘
+```
+
+**Preferred elements:**
+- Footnotes: italic or smaller text, asterisk-keyed, directly below the chart
+- Source line: "Source: [Data Provider]" in muted text
+- Author/publication credit: smallest text, bottom-right or bottom-left
+- In Power BI: use a text box or card visual below the chart for attribution
+- Keep all three lines compact — they inform but don't compete with the data
+
+### 19d. Grouped Category Labels
+
+When small multiples represent sub-groups of a larger category, use a bracket or header label to show the grouping.
+
+```
+                     ┌── People of color ──┐
+ ┌──────────┐        ┌──────┐ ┌──────┐ ┌──────┐
+ │  White   │        │Asian │ │Hisp. │ │Black │
+ │  (main)  │        │      │ │      │ │      │
+ └──────────┘        └──────┘ └──────┘ └──────┘
+```
+
+**Preferred elements:**
+- Group label above or to the left of the sub-panels
+- Subtle bracket or line connecting the grouped panels
+- Group label in lighter weight than individual panel titles
+- Helps the reader understand the taxonomy without a separate legend
+
+**Reference:** WSJ "Share of new S&P 500 directors by demographic" (Stephanie Stamm)
+
+---
+
 ## Quick Reference: DAX Patterns
 
 ### Period-over-Period Conditional Color
@@ -1061,6 +1200,7 @@ Today G/L % = DIVIDE([Today G/L], [Previous Close] * [Shares], 0)
 
 | Date | Update |
 |---|---|
+| 2026-02-20 | Added Asymmetric Small Multiples, Editorial/Journalistic Chart Style (20 screenshots total) |
 | 2026-02-20 | Added Variance Analysis/IBCS, Master-Detail Panels, Dark Theme, Treemaps, Scatter/Bubble Charts (19 screenshots total) |
 | 2026-02-20 | Added Color Philosophy, Small Multiples, Regional Sparkline Tables, YOY DAX patterns (14 screenshots total) |
 | 2026-02-20 | Initial playbook created from 10 reference screenshots |
