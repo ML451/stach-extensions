@@ -1,16 +1,63 @@
-# Power BI FactSet Shell — Implementation Guide
+# Power BI FactSet Shell — Implementation Guide (v2)
 
 ## Architecture Overview
 
-Three core deliverables:
+Three fact tables, two dimensions, and QA measures:
 
-| Deliverable | Description |
-|---|---|
-| **2FA - COMBINED** | Single normalized snapshot fact table across horizons (WTD/MTD/QTD/YTD + 1YR from UDH Total block) |
-| **UDH - TIMESERIES** | Normalized long table from `2FA - UDH` for line charts / monthly active bars, using FactSet's pre-calculated Cumulative TSR series |
-| **Fact_ExecMatrix** | Exec-only table derived from `2FA - COMBINED`: Total-grain only, Horizons QTD/YTD/1YR, Columns Port/Bench/Δ (Δ = Total Effect, not arithmetic), includes Strategy Inception Date |
+| Query | Type | Description |
+|---|---|---|
+| `fact_snapshot` | Fact | Combined normalized snapshot across horizons (MTD/QTD/YTD + 1YR from UDH Total block). All grains retained for drilldown. |
+| `fact_timeseries` | Fact | Long table from UDH for line charts (Cumulative TSR) and monthly active bars. |
+| `fact_exec_matrix` | Fact | Total-grain only, Horizons QTD/YTD/1YR, Columns Port/Bench/Δ (Δ = Total Effect, not arithmetic). |
+| `dim_port_slicer` | Dimension | Portfolio / Benchmark slicer, derived from data via `#add_port_slicer`. |
+| `dim_horizon` | Dimension | Horizon sort order (MTD=1, QTD=2, YTD=3, 1YR=4). |
 
-Plus QA measures with a **200 bps alert threshold** to catch data misalignment.
+Plus QA measures with a **200 bps alert threshold**. Note: 50-100 bps residual is normal (attribution math ≠ arithmetic Port - Bench).
+
+---
+
+## Dependency Graph
+
+```
+Raw FactSet connectors              Your existing utility functions
+─────────────────────               ──────────────────────────────
+2FA - MTD ─┐                        #unpivot_columns
+2FA - QTD ─┤                        #add_port_slicer
+2FA - YTD ─┤                        (#format_datarange — optional)
+2FA - UDH ─┘                        (#format_all_cols — optional)
+
+                    Shell queries
+                    ─────────────
+          clean_headers ← extracted header-cleaning function
+          normalize_snapshot ← composes clean_headers + #unpivot_columns
+                │
+    ┌───────────┼───────────┐
+    ▼           ▼           ▼
+_snap_mtd   _snap_qtd   _snap_ytd     _udh_1yr
+    │           │           │             │
+    └─────────┬─┘───────────┘─────────────┘
+              ▼
+        fact_snapshot ─────────► fact_exec_matrix
+              │
+              ▼
+        dim_port_slicer (via headers from 2FA - MTD)
+
+        2FA - UDH ──► fact_timeseries
+
+        dim_horizon (static sort table)
+```
+
+---
+
+## Naming Convention
+
+| Layer | Prefix | Example | Notes |
+|---|---|---|---|
+| Raw (connector) | none | `2FA - MTD` | Keep FactSet-given names |
+| Utility function | none | `clean_headers` | snake_case, verb-first |
+| Staging | `_` | `_snap_mtd` | `_` prefix = don't load to model |
+| Fact | `fact_` | `fact_snapshot` | snake_case |
+| Dimension | `dim_` | `dim_port_slicer` | snake_case |
 
 ---
 
@@ -18,27 +65,37 @@ Plus QA measures with a **200 bps alert threshold** to catch data misalignment.
 
 ### Source Queries (FactSet Connector Outputs)
 
-Snapshot horizon queries:
-- `2FA - WTD`, `2FA - MTD`, `2FA - QTD`, `2FA - YTD`
+Snapshot horizon queries (raw, wide format):
+- `2FA - MTD`, `2FA - QTD`, `2FA - YTD`
 
-UDH query:
+UDH query (raw, wide format):
 - `2FA - UDH`
+
+### Existing Utility Functions (your library)
+
+These must already exist in the Power BI file:
+- `#unpivot_columns` — unpivots columns containing `" | "`, splits headers, optionally types values
+- `#add_port_slicer` — creates VS/Portfolio/Benchmark slicer table from `"X vs. Y"` strings
+
+Optional (referenced but not required):
+- `#format_datarange` — splits `"Start to End"` date ranges
+- `#format_all_cols` — auto-detects and applies column types
 
 ### Identifiers (consistent across all tables)
 
 - `Ticker`, `total0`, `group1`
 
-### Snapshot Horizon Column Structure
+### Column Header Formats
 
+Snapshot headers (after `clean_headers`):
 ```
 <Portfolio vs Benchmark> | <Metric>
 e.g. "LARGE_PAPER vs. Russell 1000 | Port. Total Return"
 ```
 
-### UDH Column Structure
-
+UDH headers (after `clean_headers`):
 ```
-<DateRange or "Total"> | <Portfolio vs Benchmark> | <Metric>
+<PeriodToken> | <Portfolio vs Benchmark> | <Metric>
 e.g. "31-DEC-2024 to 31-JAN-2025 | LARGE_PAPER vs. Russell 1000 | Port. Total Return"
      "Total | LARGE_PAPER vs. Russell 1000 | Port. Total Return"
 ```
@@ -49,74 +106,83 @@ e.g. "31-DEC-2024 to 31-JAN-2025 | LARGE_PAPER vs. Russell 1000 | Port. Total Re
 
 ### Power Query M Files (`queries/`)
 
-| File | Query Name in Power BI | Purpose |
-|---|---|---|
-| `fn2FA_SnapshotNormalize.pq` | `fn2FA_SnapshotNormalize` | Core normalization function for snapshot horizons |
-| `Fact-WTD.pq` | `Fact - WTD` | WTD wrapper |
-| `Fact-MTD.pq` | `Fact - MTD` | MTD wrapper |
-| `Fact-QTD.pq` | `Fact - QTD` | QTD wrapper |
-| `Fact-YTD.pq` | `Fact - YTD` | YTD wrapper |
-| `UDH-SNAPSHOT-TotalBlock.pq` | `UDH - SNAPSHOT (Total Block)` | 1YR snapshot from UDH Total block |
-| `2FA-COMBINED.pq` | `2FA - COMBINED` | Combined snapshot fact across all horizons |
-| `UDH-TIMESERIES.pq` | `UDH - TIMESERIES` | Time series for charts |
-| `Dim_Strategy.pq` | `Dim_Strategy` | Strategy inception dates dimension |
-| `Fact_ExecMatrix.pq` | `Fact_ExecMatrix` | Executive matrix fact table |
+| File | Query Name | Load? | Purpose |
+|---|---|---|---|
+| `clean_headers.pq` | `clean_headers` | No | Header-cleaning function (single source of truth) |
+| `normalize_snapshot.pq` | `normalize_snapshot` | No | Wraps `clean_headers` + `#unpivot_columns` + vs-split |
+| `_snap_mtd.pq` | `_snap_mtd` | No | Buffered MTD staging |
+| `_snap_qtd.pq` | `_snap_qtd` | No | Buffered QTD staging |
+| `_snap_ytd.pq` | `_snap_ytd` | No | Buffered YTD staging |
+| `_udh_1yr.pq` | `_udh_1yr` | No | Buffered 1YR staging from UDH Total block |
+| `fact_snapshot.pq` | `fact_snapshot` | **Yes** | Combined snapshot (all horizons, all grains) |
+| `fact_timeseries.pq` | `fact_timeseries` | **Yes** | UDH time series for charts |
+| `fact_exec_matrix.pq` | `fact_exec_matrix` | **Yes** | Executive matrix (Total grain, QTD/YTD/1YR) |
+| `dim_port_slicer.pq` | `dim_port_slicer` | **Yes** | Portfolio/Benchmark slicer (data-driven) |
+| `dim_horizon.pq` | `dim_horizon` | **Yes** | Horizon sort order |
 
 ### DAX Measures (`measures/`)
 
 | File | Measures |
 |---|---|
-| `exec-measures.dax` | `Exec Value`, `Exec Port`, `Exec Bench`, `Exec Δ`, `QA Residual (bps)`, `QA Alert? (200 bps)` |
+| `exec_measures.dax` | `Exec Value`, `Exec Port`, `Exec Bench`, `Exec Δ`, `QA Residual (bps)`, `QA Alert? (200 bps)` |
 
 ---
 
 ## Setup Instructions
 
-### Step 1: Create the Core Function
+### Step 1: Ensure Utility Functions Exist
 
-1. In Power BI Desktop, open Power Query Editor
-2. Create a new Blank Query
-3. Rename it to `fn2FA_SnapshotNormalize`
-4. Paste the contents of `queries/fn2FA_SnapshotNormalize.pq`
+Verify these already exist in your Power BI file:
+- `#unpivot_columns`
+- `#add_port_slicer`
 
-### Step 2: Create Horizon Wrappers
+If not, create them as Blank Queries with the code from your Multi-Portfolio Demo.
 
-For each horizon (WTD, MTD, QTD, YTD):
+### Step 2: Create Shell Functions
+
+1. Create a new Blank Query → rename to `clean_headers` → paste `clean_headers.pq`
+2. Create a new Blank Query → rename to `normalize_snapshot` → paste `normalize_snapshot.pq`
+3. Disable load on both (right-click → uncheck "Enable load")
+
+### Step 3: Create Staging Queries
+
+For each staging query (`_snap_mtd`, `_snap_qtd`, `_snap_ytd`, `_udh_1yr`):
 1. Create a new Blank Query
-2. Name it `Fact - WTD` (etc.)
-3. Paste the corresponding `.pq` file contents
+2. Name it exactly (e.g. `_snap_mtd`)
+3. Paste the corresponding `.pq` file
+4. Disable load on all four
 
-### Step 3: Create UDH Queries
+### Step 4: Create Fact Tables
 
-1. Create `UDH - SNAPSHOT (Total Block)` from `UDH-SNAPSHOT-TotalBlock.pq`
-2. Create `UDH - TIMESERIES` from `UDH-TIMESERIES.pq`
+1. Create `fact_snapshot` from `fact_snapshot.pq` — **Enable load**
+2. Create `fact_timeseries` from `fact_timeseries.pq` — **Enable load**
+3. Create `fact_exec_matrix` from `fact_exec_matrix.pq` — **Enable load**
 
-### Step 4: Create Combined Fact
+### Step 5: Create Dimensions
 
-1. Create `2FA - COMBINED` from `2FA-COMBINED.pq`
-
-### Step 5: Create Dimension & Exec Tables
-
-1. Create `Dim_Strategy` from `Dim_Strategy.pq`
-   - **Update the placeholder inception dates** with real values
-2. Create `Fact_ExecMatrix` from `Fact_ExecMatrix.pq`
+1. Create `dim_port_slicer` from `dim_port_slicer.pq` — **Enable load**
+2. Create `dim_horizon` from `dim_horizon.pq` — **Enable load**
+3. In Model view, select `dim_horizon[Horizon]` → "Sort by Column" → `SortOrder`
 
 ### Step 6: Add DAX Measures
 
-1. In the model view, create the measures from `measures/exec-measures.dax`
-2. Add them to an appropriate measure table or to `Fact_ExecMatrix`
+1. In the model view, create the measures from `exec_measures.dax`
+2. Add them to `fact_exec_matrix` or a dedicated measures table
 
 ---
 
 ## Model Relationships
 
 ```
-Dim_Strategy[Portfolio] ──(Many-to-one)──> Fact_ExecMatrix[Portfolio]
+dim_port_slicer[Portfolio]  ──(1:*)──►  fact_snapshot[Portfolio]
+dim_port_slicer[Portfolio]  ──(1:*)──►  fact_exec_matrix[Portfolio]
+dim_port_slicer[Portfolio]  ──(1:*)──►  fact_timeseries[Portfolio]
+dim_horizon[Horizon]        ──(1:*)──►  fact_snapshot[Horizon]
+dim_horizon[Horizon]        ──(1:*)──►  fact_exec_matrix[Horizon]
 ```
 
-Optional additions:
-- `Dim_Date` for UDH timeseries using `Date` column
-- `Dim_Horizon` for sorting (QTD → YTD → 1YR) if text order is insufficient
+Optional:
+- `Dim_Date[Date]` → `fact_timeseries[Date]` if you have a shared date dimension
 
 ---
 
@@ -124,61 +190,72 @@ Optional additions:
 
 ### Page 1 — Executive Summary (Total grain only)
 
-**A) Exec Matrix** (from `Fact_ExecMatrix`)
-- Rows: `Portfolio`, `StrategyInceptionDate`, `Horizon`
+**A) Exec Matrix** (from `fact_exec_matrix`)
+- Rows: `Portfolio`, `Horizon`
 - Columns: `ExecMetric` (Port / Bench / Δ)
-- Values: `Sum(Value)`
+- Values: `[Exec Value]`
+- Note: Horizon sorts correctly via `dim_horizon` relationship
 
 **B) KPI Cards** (optional)
-- 1YR Port: filter `Horizon=1YR` and `ExecMetric=Port`
-- 1YR Bench: filter `Horizon=1YR` and `ExecMetric=Bench`
-- 1YR Δ: filter `Horizon=1YR` and `ExecMetric=Δ`
+- 1YR Port: filter `Horizon=1YR` + `ExecMetric=Port`
+- 1YR Bench: filter `Horizon=1YR` + `ExecMetric=Bench`
+- 1YR Δ: filter `Horizon=1YR` + `ExecMetric=Δ`
 
 ### Page 2 — Rolling 12M / UDH Time Series (Total grain fixed)
 
-Use `UDH - TIMESERIES` with page filter: Total grain only (`total0 = "Total"` OR `Ticker = "Total"`).
+Use `fact_timeseries` with page filter: Total grain only.
 
 **Line Chart**
 - X: `Date`
-- Values:
-  - Port cumulative TSR: filter `Metric = "Port. Cumulative Total Return"`
-  - Bench cumulative TSR: filter `Metric = "Bench. Cumulative Total Return"`
+- Values: Port cumulative TSR + Bench cumulative TSR (filter by `Metric`)
 
 **Bar Chart**
 - X: `Date`
-- Value: Monthly active — use `Metric = "Total Effect"` (attribution-consistent)
+- Value: Monthly active via `Metric = "Total Effect"`
 
 ### Page 3 — Drilldown (optional)
 
-Use `2FA - COMBINED` with slicers for:
+Use `fact_snapshot` with slicers for:
+- `dim_port_slicer[Portfolio]`
 - `total0` (sector)
 - `Ticker`
-- `Metric` (effects, returns, etc.)
+- `Metric`
 
 ### QA Page (hidden)
 
-Display `QA Residual (bps)` and `QA Alert? (200 bps)` by Portfolio × Horizon to spot duplication or grain issues.
+Display `QA Residual (bps)` and `QA Alert? (200 bps)` by Portfolio × Horizon.
 
 ---
 
-## Refresh & Maintenance Workflow
+## Refresh & Maintenance
 
-1. **Refresh** pulls raw FactSet tables: `2FA - WTD`, `2FA - MTD`, `2FA - QTD`, `2FA - YTD`, `2FA - UDH`
-2. `2FA - COMBINED` rebuilds automatically
-3. `Fact_ExecMatrix` updates automatically
-4. QA page highlights unexpected drift (200 bps threshold)
+1. **Refresh** pulls raw FactSet tables: `2FA - MTD`, `2FA - QTD`, `2FA - YTD`, `2FA - UDH`
+2. Staging queries (`_snap_*`, `_udh_1yr`) rebuild with `Table.Buffer` to avoid duplicate source evaluation
+3. `fact_snapshot`, `fact_timeseries`, `fact_exec_matrix` update automatically
+4. `dim_port_slicer` updates automatically (data-driven, no hardcoded values)
+5. QA page highlights unexpected drift (>200 bps threshold)
 
 ### Adding a New Horizon
 
-1. Create the raw query `2FA - <HORIZON>` (e.g., `2FA - ITD`)
-2. Add wrapper: `Fact - <HORIZON>` using `fn2FA_SnapshotNormalize`
-3. Append it in `2FA - COMBINED`
-4. (Optional) Add it to the exec matrix horizon filter in `Fact_ExecMatrix`
+1. Create raw query `2FA - <HORIZON>` via FactSet connector
+2. Add staging query: `_snap_<hz>` = `Table.Buffer(normalize_snapshot(#"2FA - <HORIZON>", "<HZ>"))`
+3. Append it in `fact_snapshot`
+4. Add row to `dim_horizon` with next `SortOrder` value
+5. (Optional) Add it to the exec matrix horizon filter in `fact_exec_matrix`
 
 No upstream refactoring required.
 
 ---
 
-## Design Decision: Total Grain Filter
+## Design Decisions
 
-The Total grain filter (`IsTotalGrain`) is **contained only in `Fact_ExecMatrix`**, keeping the architecture at its simplest. The `2FA - COMBINED` table retains all grains (security, sector, total) for drilldown use on Page 3.
+| Decision | Rationale |
+|---|---|
+| `clean_headers` extracted as function | Eliminates copy/paste across 3+ queries. Single fix point for FactSet header changes. |
+| `normalize_snapshot` wraps `#unpivot_columns` | Reuses tested utility code. Thin wrapper adds only the vs-split and horizon tag. |
+| `dim_port_slicer` via `#add_port_slicer` | Self-maintaining, no hardcoded portfolio list. Stays current on refresh. |
+| `dim_horizon` static sort table | Power BI needs a sort column. Alphabetical order (1YR, MTD, QTD, YTD) is wrong. |
+| `Table.Buffer` on staging | Prevents Power BI from re-evaluating raw FactSet sources multiple times during refresh. |
+| Null value filtering | `each [Value] <> null` after type conversion prevents blank rows in facts and exec matrix. |
+| Total grain filter in `fact_exec_matrix` only | Keeps `fact_snapshot` at all grains for drilldown. Simplest architecture. |
+| WTD excluded | Scope: MTD/QTD/YTD/1YR. Add back via staging query if needed. |

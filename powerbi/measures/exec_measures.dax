@@ -1,0 +1,34 @@
+// =============================================================================
+// Executive Summary DAX Measures
+// =============================================================================
+// Operate on fact_exec_matrix.
+// QA note: 50-100 bps residual is normal (attribution math ≠ arithmetic).
+//          >200 bps indicates data duplication or grain mismatch.
+// =============================================================================
+
+
+// Base measure
+Exec Value :=
+SUM ( fact_exec_matrix[Value] )
+
+
+// Exec metric measures (matrix visual or KPI cards)
+
+Exec Port :=
+CALCULATE ( [Exec Value], fact_exec_matrix[ExecMetric] = "Port" )
+
+Exec Bench :=
+CALCULATE ( [Exec Value], fact_exec_matrix[ExecMetric] = "Bench" )
+
+Exec Δ :=
+CALCULATE ( [Exec Value], fact_exec_matrix[ExecMetric] = "Δ" )
+
+
+// QA: residual between arithmetic (Port - Bench) and attribution Δ
+
+QA Residual (bps) :=
+VAR residual = ( [Exec Port] - [Exec Bench] ) - [Exec Δ]
+RETURN 10000 * residual
+
+QA Alert? (200 bps) :=
+IF ( ABS([QA Residual (bps)]) > 200, "ALERT", "OK" )
